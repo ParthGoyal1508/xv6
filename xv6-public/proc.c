@@ -7,6 +7,13 @@
 #include "proc.h"
 #include "spinlock.h"
 
+struct pstat {
+    int inuse[NPROC]; // whether this slot of the process table is in use (1 or 0)
+    int pid[NPROC];   // PID of each process
+    int priority[NPROC]; // current priority level of each process (0-3)
+    int ticks[NPROC][4]; // number of ticks each process has accumulated at each of 4 priorities
+};
+
 struct
 {
   struct spinlock lock;
@@ -118,6 +125,7 @@ found:
   p->ctime = ticks;
   p->etime = 0;
   p->rtime = 0;
+  p->priority = 60;
   return p;
 }
 
@@ -279,14 +287,16 @@ void exit(void)
   panic("zombie exit");
 }
 
-void update_run_time(){
-    struct proc *p;
-   acquire(&ptable.lock);
-   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-     if(p->state==RUNNING)
+void update_run_time()
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if (p->state == RUNNING)
       p->rtime++;
-   }
-   release(&ptable.lock);
+  }
+  release(&ptable.lock);
 }
 
 // Wait for a child process to exit and return its pid.
@@ -404,11 +414,12 @@ void scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+
+#ifdef DEFAULT
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       if (p->state != RUNNABLE)
         continue;
-
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -423,6 +434,102 @@ void scheduler(void)
       // It should have changed its p->state before coming back.
       c->proc = 0;
     }
+#else
+#ifdef FCFS
+    struct proc *minP = 0;
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if (p->state == RUNNABLE)
+      {
+        if (minP != 0)
+        {
+          if (p->ctime < minP->ctime)
+            minP = p;
+        }
+        else
+          minP = p;
+      }
+    }
+
+    if (minP != 0)
+    {
+      p = minP; //the process with the smallest creation time
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+
+      swtch(&(c->scheduler), p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
+    }
+#else
+#ifdef PBS
+    struct proc *h_p = 0;
+    struct proc *new_p;
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      // // Choose the process with highest priority (among RUNNABLEs)
+      // if (p->state == RUNNABLE || p->state == RUNNING)
+      // {
+      //   if (new_p == 0)
+      //   {
+      //     new_p = p;
+      //   }
+      //   else
+      //   {
+      //     if (p->priority < new_p->priority)
+      //     {
+      //       new_p = p;
+      //     }
+      //   }
+      // }
+      // if(new_p == 0)
+      //   new_p = p;
+      if (p->state != RUNNABLE)
+        continue;
+      h_p = p;
+      for (new_p = ptable.proc; new_p < &ptable.proc[NPROC]; new_p++)
+      {
+        if (new_p->state == RUNNABLE)
+        {
+          if (h_p->priority > new_p->priority)
+          {
+            h_p = new_p;
+          }
+        }
+      }
+      p = h_p;
+      if (p != 0)
+      {
+        // p = new_p; //the process with the highest priority
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+    }
+#else
+#ifdef MLFQ
+
+#endif
+#endif
+#endif
+#endif
     release(&ptable.lock);
   }
 }
@@ -455,10 +562,12 @@ void sched(void)
 // Give up the CPU for one scheduling round.
 void yield(void)
 {
+#ifndef FCFS
   acquire(&ptable.lock); //DOC: yieldlock
   myproc()->state = RUNNABLE;
   sched();
   release(&ptable.lock);
+#endif
 }
 
 // A fork child's very first scheduling by scheduler()
@@ -602,4 +711,49 @@ void procdump(void)
     }
     cprintf("\n");
   }
+}
+
+// change priority for a given process
+int set_priority(int pid, int priority)
+{
+  acquire(&ptable.lock);
+  for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if (p->pid == pid)
+    {
+      int prev = p->priority;
+      p->priority = priority;
+      cprintf("Previous priority of\t PID %d is %d\n", pid, prev);
+      cprintf("Current priority of\t PID %d is %d\n", pid, priority);
+      release(&ptable.lock);
+      return prev;
+    }
+  }
+  release(&ptable.lock);
+  return -1;
+}
+
+int ps()
+{
+  struct proc *p;
+
+  // Enable interrupts on this processor.
+  sti();
+
+  // Loop over process table looking for process with pid.
+  acquire(&ptable.lock);
+  cprintf("name \t pid \t state \t \t priority \tCreation_time\n");
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; ++p)
+  {
+    if (p->state == SLEEPING)
+      cprintf("%s \t %d  \t SLEEPING \t %d\t\t %d\n", p->name, p->pid, p->priority, p->ctime);
+    else if (p->state == RUNNING)
+      cprintf("%s \t %d  \t RUNNING \t %d\t\t %d\n", p->name, p->pid, p->priority, p->ctime);
+    else if (p->state == RUNNABLE)
+      cprintf("%s \t %d  \t RUNNABLE \t %d\t\t %d\n", p->name, p->pid, p->priority, p->ctime);
+  }
+
+  release(&ptable.lock);
+
+  return 22;
 }

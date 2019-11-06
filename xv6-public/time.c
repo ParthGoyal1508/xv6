@@ -1,13 +1,13 @@
 #include "types.h"
 #include "stat.h"
 #include "user.h"
-#include "fs.h"
 
 int main(int argc, char *argv[])
 {
 
     int pid;
-    int status = 0, a = 0, b = 0;
+    int status, a, b;
+    status = a = b = 0;
     pid = fork();
     if (pid != 0)
     {

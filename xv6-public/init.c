@@ -19,6 +19,16 @@ main(void)
   dup(0);  // stdout
   dup(0);  // stderr
 
+  #ifdef DEFAULT
+    printf(1, "Scheduler policy: DEFAULT\n");
+  #endif
+  #ifdef PBS
+    printf(1, "Scheduler policy: PBS\n");
+  #endif
+  #ifdef FCFS
+    printf(1, "Scheduler policy: FCFS\n");
+  #endif
+
   for(;;){
     printf(1, "init: starting sh\n");
     pid = fork();
@@ -32,6 +42,6 @@ main(void)
       exit();
     }
     while((wpid=wait()) >= 0 && wpid != pid)
-      printf(1, "zombie!\n");
+      printf(1, "pid with %d zombie!\n", wpid);
   }
 }
