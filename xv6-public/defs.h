@@ -1,3 +1,4 @@
+#include "procstat.h"
 struct buf;
 struct context;
 struct file;
@@ -123,6 +124,7 @@ void            wakeup(void*);
 void            yield(void);
 int             ps(void);
 int             set_priority(int, int);
+int             getpinfo(struct proc_stat*, int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

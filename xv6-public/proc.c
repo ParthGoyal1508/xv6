@@ -7,12 +7,9 @@
 #include "proc.h"
 #include "spinlock.h"
 
-struct pstat {
-    int inuse[NPROC]; // whether this slot of the process table is in use (1 or 0)
-    int pid[NPROC];   // PID of each process
-    int priority[NPROC]; // current priority level of each process (0-3)
-    int ticks[NPROC][4]; // number of ticks each process has accumulated at each of 4 priorities
-};
+struct proc *queues[5][NPROC];
+int no_of_process_per_table[5] = {-1, -1, -1, -1};
+int time_slice_per_table[5] = {1, 2, 4, 8, 16};
 
 struct
 {
@@ -126,6 +123,10 @@ found:
   p->etime = 0;
   p->rtime = 0;
   p->priority = 60;
+  #ifdef MLFQ
+    cprintf("MLFQ");
+    p->priority = 4;
+  #endif
   return p;
 }
 
@@ -416,6 +417,7 @@ void scheduler(void)
     acquire(&ptable.lock);
 
 #ifdef DEFAULT
+    cprintf("DEFAULT");
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       if (p->state != RUNNABLE)
@@ -436,6 +438,7 @@ void scheduler(void)
     }
 #else
 #ifdef FCFS
+    cprintf("FCFS");
     struct proc *minP = 0;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
@@ -470,6 +473,7 @@ void scheduler(void)
     }
 #else
 #ifdef PBS
+    cprintf("PBS");
     struct proc *h_p = 0;
     struct proc *new_p;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
@@ -525,7 +529,60 @@ void scheduler(void)
     }
 #else
 #ifdef MLFQ
-
+    cprintf("MLFQ");
+    for (int x = 0;x < 4; x++)
+    {
+      if (no_of_process_per_table[x] != -1)
+      {
+        for (int i = 0; i < no_of_process_per_table[x]; ++i)
+        {
+          if (queues[x][i]->state != RUNNABLE)
+            continue;
+          else
+          {
+            p = queues[x][i];
+            c->proc = p;
+            p->clicks += 1;
+            p->ticks[x] += 1;
+            switchuvm(p);
+            p->state = RUNNING;
+            swtch(&(c->scheduler), p->context);
+            switchkvm();
+            queues[x][i]->clicks = p->clicks;
+            if (x != 4)
+            {
+              if (p->clicks == time_slice_per_table[x])
+              {
+                //copy to next queue
+                no_of_process_per_table[x + 1] += 1;
+                p->priority += 1;
+                queues[x + 1][no_of_process_per_table[x + 1]] = p;
+                //delete from existing queue
+                queues[x][i] = 0;
+                for (int j = i; j < no_of_process_per_table[x]; ++j)
+                {
+                  queues[x][j] = queues[x][j + 1];
+                }
+                queues[x][no_of_process_per_table[x]] = 0;
+                p->clicks = 0;
+                no_of_process_per_table[x] -= 1;
+              }
+            }
+            else
+            {
+              //move to end of its own queue
+              queues[x][i] = 0;
+              for (int j = i; j < no_of_process_per_table[x]; ++j)
+              {
+                queues[x][j] = queues[x][j + 1];
+              }
+              queues[x][no_of_process_per_table[x]] = p;
+            }
+            c->proc = 0;
+          }
+        }
+      }
+    }
 #endif
 #endif
 #endif
@@ -756,4 +813,26 @@ int ps()
   release(&ptable.lock);
 
   return 22;
+}
+
+int getpinfo(struct proc_stat *st, int pid)
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; ++p)
+  {
+    if (p->pid == st->pid)
+    {
+      st->pid = p->pid;
+      st->runtime = (float)(p->rtime);
+      st->num_run = p->clicks;
+      st->current_queue = p->priority;
+      for (int i = 0; i < 5; i++)
+        st->ticks[i] = p->ticks[i];
+      release(&ptable.lock);
+      return 1;
+    }
+  }
+  release(&ptable.lock);
+  return 0;
 }

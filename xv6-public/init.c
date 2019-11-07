@@ -28,6 +28,9 @@ main(void)
   #ifdef FCFS
     printf(1, "Scheduler policy: FCFS\n");
   #endif
+  #ifdef MLFQ
+    printf(1, "Scheduler policy: MLFQ\n");
+  #endif
 
   for(;;){
     printf(1, "init: starting sh\n");

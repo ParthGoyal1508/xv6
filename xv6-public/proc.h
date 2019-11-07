@@ -62,15 +62,8 @@ struct proc
   char name[16];              // Process name (debugging)
   int priority;               //priority of a process ranging from 0-100
   int ctime, etime, rtime;
-};
-
-struct proc_stat
-{
-  int pid;           // PID of each process
-  float runtime;     // Use suitable unit of time
-  int num_run;       // number of time the process is executed
-  int current_queue; // current assigned queue
-  int ticks[5];      // number of ticks each process has received at each of the 5 priority queue
+  int clicks;
+  int ticks[5];
 };
 
 // Process memory is laid out contiguously, low addresses first:

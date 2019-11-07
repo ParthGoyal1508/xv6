@@ -72,7 +72,7 @@ QEMU = $(shell if which qemu > /dev/null; \
 endif
 
 ifndef SCHEDULER
-	SCHEDULER := DEFAULT
+SCHEDULER := DEFAULT
 endif
 
 CC = $(TOOLPREFIX)gcc
@@ -183,6 +183,7 @@ UPROGS=\
 	_time\
 	_sleep\
 	_set_priority\
+	_getpinfo\
 	_foo\
 	_mkdir\
 	_rm\
@@ -208,9 +209,6 @@ clean:
 FILES = $(shell grep -v '^\#' runoff.list)
 PRINT = runoff.list runoff.spec README toc.hdr toc.ftr $(FILES)
 
-flags:
-	@echo $(SCHEDULER)
-
 xv6.pdf: $(PRINT)
 	./runoff
 	ls -l xv6.pdf
@@ -234,6 +232,9 @@ CPUS := 2
 endif
 QEMUOPTS = -drive file=fs.img,index=1,media=disk,format=raw -drive file=xv6.img,index=0,media=disk,format=raw -smp $(CPUS) -m 512 $(QEMUEXTRA)
 
+flags:
+	@echo $(SCHEDULER)
+	
 qemu: fs.img xv6.img
 	$(QEMU) -serial mon:stdio $(QEMUOPTS)
 
@@ -262,7 +263,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 
 EXTRA=\
 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
-	ln.c ls.c time.c sleep.c set_priority.c ps.c foo.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
+	ln.c ls.c time.c sleep.c set_priority.c ps.c foo.c getpinfo.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
 	printf.c umalloc.c\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
 	.gdbinit.tmpl gdbutil\

@@ -37,6 +37,17 @@ int sys_waitx(void)
   return waitx(wtime, rtime);
 }
 
+//getpinfo
+int sys_getpinfo(void){
+  struct proc_stat *st;
+  int pid;
+  if(argptr(0, (char **)&st, sizeof(int)) <0)
+    return 12;
+   if (argint(0, &pid) < 0)
+    return -1;
+  return getpinfo(st, pid);
+}
+
 int sys_kill(void)
 {
   int pid;
